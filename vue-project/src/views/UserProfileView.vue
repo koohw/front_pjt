@@ -9,6 +9,7 @@ const router = useRouter();
 const userId = store.userProfile.pk;
 const profile = ref(null); // 프로필 데이터 상태
 const likedMoviesDetails = ref([]); // 좋아요한 영화 상세 정보
+const recommendedMovies = ref([]); // 추천 영화 상태
 const apiKey = import.meta.env.VITE_TMDB_API_KEY; // TMDB API 키
 const baseUrl = "https://api.themoviedb.org/3"; // TMDB API URL
 
@@ -35,6 +36,9 @@ onMounted(async () => {
     );
     const movieResponses = await Promise.all(moviePromises);
     likedMoviesDetails.value = movieResponses.map((res) => res.data);
+
+    // 좋아요한 영화 기반 추천 영화 가져오기
+    fetchRecommendedMovies();
   } catch (error) {
     console.error("데이터를 가져오는 중 오류 발생:", error);
   }
@@ -61,6 +65,35 @@ const toggleLike = async (movieId) => {
     }
   } catch (error) {
     console.error("좋아요 요청 실패:", error);
+  }
+};
+
+// 좋아요한 영화 장르 기반 영화 추천
+const fetchRecommendedMovies = async () => {
+  try {
+    // 좋아요한 영화의 모든 장르 ID 추출
+    const likedGenres = Array.from(
+      new Set(likedMoviesDetails.value.flatMap((movie) => movie.genres.map((g) => g.id)))
+    );
+
+    // 각 장르에 대해 추천 영화 가져오기
+    const genrePromises = likedGenres.map((genreId) =>
+      axios.get(`${baseUrl}/discover/movie`, {
+        params: { api_key: apiKey, language: "ko", with_genres: genreId, page: 1 },
+      })
+    );
+    const genreResponses = await Promise.all(genrePromises);
+
+    // 추천 영화 목록 합치기
+    const allMovies = genreResponses.flatMap((res) => res.data.results);
+
+    // 중복 제거 및 랜덤으로 5개 선택
+    const uniqueMovies = Array.from(new Set(allMovies.map((movie) => movie.id))).map(
+      (id) => allMovies.find((movie) => movie.id === id)
+    );
+    recommendedMovies.value = uniqueMovies.sort(() => 0.5 - Math.random()).slice(0, 5);
+  } catch (error) {
+    console.error("추천 영화 가져오기 실패:", error);
   }
 };
 </script>
@@ -123,6 +156,25 @@ const toggleLike = async (movieId) => {
     </div>
     <div v-else>
       <p>관심있는 영화를 추가해보세요</p>
+    </div>
+
+    <!-- 추천 영화 섹션 -->
+    <div class="recommended-container" v-if="recommendedMovies.length">
+      <h4>추천 영화</h4>
+      <div class="movie-list">
+        <div
+          v-for="movie in recommendedMovies"
+          :key="movie.id"
+          class="movie-item"
+          @click="goToMovieDetail(movie.id)"
+        >
+          <img
+            :src="`https://image.tmdb.org/t/p/w500${movie.poster_path}`"
+            alt="포스터"
+            class="movie-poster"
+          />
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -329,4 +381,6 @@ button:hover {
     width: 100%;
   }
 }
+
+
 </style>
